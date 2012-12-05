@@ -122,8 +122,6 @@ class CodeBase(object):
 
     def parseData(self, line):
         raise Exception("parseData not defined")
-    def flushCue(self, commandCue):
-        raise Exception("parseData not defined")
     
     def parseComment(self, line):
         result = line.split("(")
@@ -174,15 +172,12 @@ class CommandCode(CodeBase):
         #print "Not implemented"
 
     def parseData( self, s_line ):
-        #print "Parse data", s_line
         line = s_line.strip()
         self.data.append( line )
         
     def serialize(self):
         result=""
         for cmd in self.data:
-            #result += cmd + "\n"
-            #print "CommandCode (%s)" % cmd
             result += str(self.code) + " " + str(cmd) + "\n"
         return result
         
@@ -192,13 +187,11 @@ class GCodeComment(CodeBase):
         
     def parseData( self, line ):
         cmd, comment = self.parseComment(line)
-        #print "Parse data", s_line
         self.data.append( line )
 
     def serialize(self):
         result=None
         for cmd in self.data:
-            #result += cmd + "\n"
             result = cmd + "\n"
         return result
 
@@ -216,10 +209,8 @@ class GCode0(CoordinateCode):
         
     def parseData( self, line ):
         cmd, comment = self.parseComment(line)
-        #print "parseData (%s) (%s)" % ( str(cmd), str(comment) )
         data = cmd.split(" ")
         code = data[0]
-        #print "AAA", cmd, line, data
         for i in data:
             if i.startswith("X"):
                 self.x = float(i[1:])
@@ -230,12 +221,9 @@ class GCode0(CoordinateCode):
             elif i.startswith("E"):
                 self.e = float(i[1:])
         result = (self.x, self.y, self.z, self.e)
-        #print "parseData", result
-        #print "parseData", len( self.data )
         self.data.append( result )
 
     def serialize(self):
-        #print "serialize", len(self.data)
         result="G92 E0 (Added to set the amount of Filament)\n"
         #result=""
         for cmd in self.data:
@@ -243,7 +231,6 @@ class GCode0(CoordinateCode):
             #result += cmd + "\n"
             lresult = ""
             for axis, val in enumerate(cmd):
-                #print axis, val
                 if axis == 0 and val!=None:
                     lresult += " X%s" % (val * self.scaleX + self.offsetX)
                 elif axis == 1 and val!=None:
@@ -255,7 +242,6 @@ class GCode0(CoordinateCode):
 
             result += self.code + lresult + "\n"
 
-            #print "RES", result
         return result
 
 class GCode1(GCode0):
@@ -293,7 +279,6 @@ class MCode3(CommandCode):
         CommandCode.__init__(self, code)
 
     def parseData( self, s_line ):
-        #print "Parse data", s_line
         line = s_line.strip()
         self.data.append( line )
         
@@ -326,7 +311,6 @@ class MCode302(CommandCode):
         CommandCode.__init__(self, code)
 
     def parseData( self, s_line ):
-        #print "Parse data", s_line
         line = s_line.strip()
         self.data.append( line )
         
@@ -365,7 +349,6 @@ def gCodeLookup(line):
     s_gCode=None
 
     if line.startswith(";"):
-        #print "Found Comment"
         gCode = -1
         s_gCode = ";"
     elif line.startswith("G"):
@@ -464,13 +447,6 @@ def gCodeLookup(line):
         else:
             if verbose:
                 print "Found TCode", line
-    #else:
-    #    print "AA", gCode, line
-#    return s_gCode, gCode, fCode, mCode, tCode
-    #if not s_gCode:
-    #    print "Non Code (%s) (%s)" % ( s_gCode, line )
-    #if s_gCode:
-    #    print "G Code (%s) (%s)" % ( s_gCode, line )
 
     return s_gCode
 
@@ -515,7 +491,6 @@ class Cnc2printer(object):
 
             try:
                 s_gCode = gCodeLookup(line)
-#                print s_gCode, gCode, fCode, mCode, tCode
                 if s_gCode == "G54":
                     print "Found (%s)" % s_gCode, factoryLookups.get(s_gCode)
                     print factoryLookups.keys()
@@ -527,24 +502,16 @@ class Cnc2printer(object):
 
             if oldGcode != s_gCode:
                 gCodeI = factoryLookups.get(s_gCode, CommandCode)(s_gCode)
-                #print gCodeI
                 commandCue.append(gCodeI)
-                #print s_gCode, len(s_gCode)
-                #print line
-                #print commandCue
                 
                 #Remove the code from the line
                 if s_gCode != ";":
                     line = line[len(s_gCode):]
                     
                 while line[0].isspace():
-                #    #print line
                     line = line[1:]
 
-                #print "Lookup Factory", s_gCode, gCodeI
-
             if gCodeI:
-                #print line
                 gCodeI.parseData(line)
                 
             oldCode = s_gCode
@@ -556,13 +523,6 @@ class Cnc2printer(object):
         #print commandCue
         for gObj in commandCue:
             cmd = gObj.serialize()
-            #print cmd
-            #print type(gObj)
-            #if not isinstance(gObj, 'cnc2printer.GCodeComment'):
-            #    print cmd, type(gObj)
-            #print type(gObj), type(GCodeComment())
-            #if type(gObj) != type(GCodeComment()):
-            #    print cmd #, type(gObj), type(GCodeComment())
             if cmd:
                 ofp.write( str(cmd) )
 
