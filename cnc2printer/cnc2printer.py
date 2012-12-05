@@ -491,9 +491,6 @@ class Cnc2printer(object):
 
             try:
                 s_gCode = gCodeLookup(line)
-                if s_gCode == "G54":
-                    print "Found (%s)" % s_gCode, factoryLookups.get(s_gCode)
-                    print factoryLookups.keys()
             except:
                 print line
                 import traceback
