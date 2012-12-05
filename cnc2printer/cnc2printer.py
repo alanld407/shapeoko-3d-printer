@@ -1,6 +1,6 @@
-##This is a pronterface python plugin that probes across the hotbed and
-## prints the Z offsets from the home position
-## This requires that you are using the hot end as the endstop
+##This is a pronterface python plugin that converts cnc gcode
+## to printer/marlin gcode so that printerface and RAMPS can be 
+## used for milling
 
 ## One macro need to be deined in pronterface to execute the code
 ##  Be sure to remove the # comments when creating the macro
@@ -340,11 +340,11 @@ factoryLookups = {
     "G1":GCode1,
     "G04":CommandCode,
     "G21":NotImplementedCode, 
-    "G40":NotImplementedCode, 
-    "G49":NotImplementedCode, 
+    "G40":NotImplementedCode,�
+    "G49":NotImplementedCode,�
     "G54":NotImplementedCode, 
     "G61":NotImplementedCode, #exact path mode
-    "G80":NotImplementedCode, #cancel modal motion 
+    "G80":NotImplementedCode, #cancel modal motion�
     "G90":GCode90,
     "G91":GCode91,
     "F":NotImplementedCode,  #
