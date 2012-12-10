@@ -21,7 +21,9 @@
 #!cnc2printer.level()
 
 import time, sys, threading
+import os
 import re
+import wx
 
 """
 // look here for descriptions of gcodes: http://linuxcnc.org/handbook/gcode/g-code.html
@@ -107,17 +109,20 @@ import re
 //Stepper Movement Variables
 """
 
+global x
+global y
+global z
 
 class CodeBase(object):
     def __init__(self, code=None):
         self.data = []
         self.comment = None
         self.code = code
-        self.scaleX = 15
-        self.scaleY = 15
+        self.scaleX = 1
+        self.scaleY = 1
         self.scaleZ = 1
-        self.offsetX = 100
-        self.offsetY = 100
+        self.offsetX = 50
+        self.offsetY = 50
         self.offsetZ = 0
 
     def parseData(self, line):
@@ -140,30 +145,39 @@ class NotImplementedCode(CodeBase):
     '''
     def __init__(self, code=None):
         CodeBase.__init__(self, code)
-        #print "Not implemented"
 
     def parseData( self, s_line ):
-        #print "Parse data", self.code, s_line
         self.data.append( s_line )
         
     def serialize(self):
-        #print "Not wriiten to File", self.data
-        return None
+        result=""
+        for cmd in self.data:
+            result += ";" + str(self.code) + " " + str(cmd) + "    (Not Implemented)\n"
+        return result
 
+class FSCode(NotImplementedCode):
+    def __init__(self, code=None):
+        NotImplementedCode.__init__(self, code)
+
+    def serialize(self):
+        result=""
+        for cmd in self.data:
+            result += ";" + str(self.code) + str(cmd) + "    (Not Implemented)\n"
+        return result
+    
 class CoordinateCode(CodeBase):
     def __init__(self, code=None):
         CodeBase.__init__(self, code)
         #print "Not implemented"
 
     def parseData( self, s_line ):
-        #print "Parse data", s_line
-        self.data.append( s_line )
+        line = ";" + s_line
+        self.data.append( line )
         
     def serialize(self):
-        result=None
+        result=""
         for cmd in self.data:
-            #result += cmd + "\n"
-            result = cmd + "\n"
+            result += cmd + "\n"
         return result
 
 class CommandCode(CodeBase):
@@ -195,6 +209,7 @@ class GCodeComment(CodeBase):
             result = cmd + "\n"
         return result
 
+
 class GCode0(CoordinateCode):
     '''
         G0  -> G1
@@ -205,22 +220,34 @@ class GCode0(CoordinateCode):
         self.x = None
         self.y = None
         self.z = None
-        self.e = 0.0
+        self.e = 1.0 
+        #Need to supply a little E so that 
+        #  pronterface will load an display the gcode
         
     def parseData( self, line ):
+        global x
+        global y
+        global z
+	x = self.x
+	y = self.y
+	z = self.z
         cmd, comment = self.parseComment(line)
         data = cmd.split(" ")
         code = data[0]
         for i in data:
             if i.startswith("X"):
                 self.x = float(i[1:])
+                x = self.x
             elif i.startswith("Y"):
                 self.y = float(i[1:])
+                y = self.y
             elif i.startswith("Z"):
                 self.z = float(i[1:])
+                z = self.z
             elif i.startswith("E"):
                 self.e = float(i[1:])
-        result = (self.x, self.y, self.z, self.e)
+        #result = (self.x, self.y, self.z, self.e)
+        result = (x, y, z, self.e)
         self.data.append( result )
 
     def serialize(self):
@@ -247,7 +274,7 @@ class GCode0(CoordinateCode):
 class GCode1(GCode0):
     def __init__(self, code="G1"):
         GCode0.__init__(self, code)
-        self.scaleZ = .1
+        self.scaleZ  = 1
         self.offsetZ = 0
 
 class GCode90(CommandCode):
@@ -294,7 +321,6 @@ class MCode4(CommandCode):
         CommandCode.__init__(self, code)
 
     def parseData( self, s_line ):
-        #print "Parse data", s_line
         line = s_line.strip()
         self.data.append( line )
         
@@ -324,15 +350,15 @@ factoryLookups = {
     "G1":GCode1,
     "G04":CommandCode,
     "G21":NotImplementedCode, 
-    "G40":NotImplementedCode,�
-    "G49":NotImplementedCode,�
+    "G40":NotImplementedCode,
+    "G49":NotImplementedCode,
     "G54":NotImplementedCode, 
     "G61":NotImplementedCode, #exact path mode
-    "G80":NotImplementedCode, #cancel modal motion�
+    "G80":NotImplementedCode, #cancel modal motion
     "G90":GCode90,
     "G91":GCode91,
-    "F":NotImplementedCode,  #
-    "S":NotImplementedCode,  #
+    "F":FSCode,  #
+    "S":FSCode,  #
     "M302":MCode302,         # Marlin: Enable Cold Extrudes
     "M2":NotImplementedCode, # End Program
     "M3":MCode3,             # Start Spindle -> M106 Fan On
@@ -341,6 +367,7 @@ factoryLookups = {
     "P3":NotImplementedCode,
     
     "T1":NotImplementedCode, #
+    "T2":NotImplementedCode, #
     "T3":NotImplementedCode, #
     }
 
@@ -354,121 +381,105 @@ def gCodeLookup(line):
     elif line.startswith("G"):
         if line.startswith("G04"):
             s_gCode = "G04"
-            if verbose:
-                print "Found GCode 04"
         elif line.startswith("G21"):
             s_gCode = "G21"
-            if verbose:
-                print "Found GCode 21"
         elif line.startswith("G40"):
             s_gCode = "G40"
-            if verbose:
-                print "Found GCode 40"
         elif line.startswith("G49"):
             s_gCode = "G49"
-            if verbose:
-                print "Found GCode 49"                
         elif line.startswith("G54"):
             s_gCode = "G54"
-            if verbose:
-                print "Found GCode 54"                
         elif line.startswith("G61"):
             s_gCode = "G61"
-            if verbose:
-                print "Found GCode 61"                
         elif line.startswith("G80"):
             s_gCode = "G80"
-            if verbose:
-                print "Found GCode 80"                
         elif line.startswith("G90"):
             s_gCode = "G90"
-            if verbose:
-                print "Found GCode 90"                
         elif line.startswith("G49"):
             s_gCode = "G49"
-            if verbose:
-                print "Found GCode 49"
         elif line.startswith("G0"):
             s_gCode = "G0"
-            if verbose:
-                print "Found GCode 0"
         elif line.startswith("G1"):
             s_gCode = "G1"
-            if verbose:
-                print "Found GCode 1"
-        else:
-            if verbose:
-                print "Found GCode", line
     elif line.startswith("F"):
         s_gCode = "F"
-        if verbose:
-            print "Found FCode"
     elif line.startswith("M"):
         if line.startswith("M2"):
             s_gCode = "M2"
-            if verbose:
-                print "Start Spindle"
         elif line.startswith("M3"):
             s_gCode = "M3"
-            if verbose:
-                print "Start Spindle"
         elif line.startswith("M5"):
             s_gCode = "M5"
-            if verbose:
-                print "Found MCode 5"
-        else:
-            if verbose:
-                print "Found MCode", line
     elif line.startswith("P"):
         if line.startswith("P3"):
             s_gCode = "P3"
-            if verbose:
-                print "Start Spindle"
-        else:
-            if verbose:
-                print "Found MCode", line
     elif line.startswith("S"):
         s_gCode = "S"
-        if verbose:
-             print "Found SCode"
     elif line.startswith("T"):
         if line.startswith("T1"):
             s_gCode = "T1"
-            if verbose:
-                print "Found TCode 1"
         elif line.startswith("T2"):
             s_gCode = "T2"
-            if verbose:
-                print "Found TCode 2"
         elif line.startswith("T3"):
             s_gCode = "T3"
-            if verbose:
-                print "Found TCode 3"
-        else:
-            if verbose:
-                print "Found TCode", line
+
+    if verbose:
+        print "Found Code", s_gCode
 
     return s_gCode
 
 class Cnc2printer(object):
     def __init__(self, parent):
         self.parent = parent
-        self.inputFilename  = "C:/Users/Ryan/Documents/3dStlFiles/cylinder/cylinder_v1.ngc"
-        self.outputFilename = "C:/Users/Ryan/Documents/3dStlFiles/cylinder/cylinder_convert.gcode"
+        self.last_path = "C:/Users/Ryan/Documents/3dStlFiles/"
+        self.inputFilename  = ""
+        self.outputFilename = ""
         self.x = None
         self.y = None
         self.z = None
-        
+
+    def loadFiles(self):
+        result=""
+
+        basedir = self.last_path
+        if not os.path.exists(basedir):
+            basedir = "."
+            try:
+                basedir = os.path.split(self.filename)[0]
+            except:
+                pass
+
+        dlg = wx.FileDialog(self.parent, _("Open file to translate"), 
+                          basedir, style = wx.FD_OPEN|wx.FD_FILE_MUST_EXIST)
+        option = " GCODE files (*.gcode;*.gco;*.g;*.ngc;)|"
+        option += "*.gcode;*.gco;*.g;*.ngc;|All Files (*.*)|*.*"
+        dlg.SetWildcard(_(option))
+        if(dlg.ShowModal() == wx.ID_OK):
+            result = dlg.GetPath()
+        return result
+
     def convert(self):
         self.parent.clearOutput("")
+        try:
+            self.inputFilename = self.loadFiles()
+            if not self.inputFilename:
+                print "No File specified" 
+                return
+        except Exceptiom, error:
+            print error
+
+        if self.inputFilename:
+            res = self.inputFilename.split(".")
+            self.outputFilename = res[0] + "_convert.gcode"
+	    self.last_path = os.path.dirname(self.inputFilename)
         
-        print self.inputFilename
+        print "InputFile", self.inputFilename
         try:
             ifp=open(self.inputFilename, "r")
         except:
             print "Failed to open", self.inputFilename
 
-        print self.outputFilename
+        print "OutputFile", self.outputFilename
         try:
             ofp=open(self.outputFilename, "w")
         except:
@@ -484,40 +495,40 @@ class Cnc2printer(object):
         
         for s_line in ifp.readlines():
             line = s_line
-            if line:
-                while line[-1] != ";" and line[-1] != "]" and line[-1] != ")" and not line[-1].isalnum():
-                    #print line
+            if line and len(line) > 1:
+                while line[-1] != ";" and \
+                      line[-1] != "]" and \
+                      line[-1] != ")" and \
+                      not line[-1].isalnum():
                     line = line[:-1]
 
             try:
                 s_gCode = gCodeLookup(line)
             except:
-                print line
+                print "Error", line
                 import traceback
                 traceback.print_stack()
                 raise
-
-            if oldGcode != s_gCode:
+ 
+            if s_gCode and oldGcode != s_gCode:
                 gCodeI = factoryLookups.get(s_gCode, CommandCode)(s_gCode)
                 commandCue.append(gCodeI)
-                
-                #Remove the code from the line
+
+                #Remove the code from the line`
                 if s_gCode != ";":
                     line = line[len(s_gCode):]
                     
-                while line[0].isspace():
-                    line = line[1:]
+            while line[0].isspace():
+                line = line[1:]
 
             if gCodeI:
                 gCodeI.parseData(line)
                 
-            oldCode = s_gCode
+            oldGcode = s_gCode
         ifp.close()
 
-
         
-        print "Outputing File", self.outputFilename
-        #print commandCue
+        print "Outputing File"
         for gObj in commandCue:
             cmd = gObj.serialize()
             if cmd:
@@ -536,6 +547,8 @@ def GetCnc2printerSingleton(parent):
     if not cnc2printerSingleton:
         cnc2printerSingleton=Cnc2printer(parent)
     return cnc2printerSingleton
+
+
         
 #if __name__ == '__main__':
 ##if True:
