@@ -124,6 +124,14 @@ class CodeBase(object):
         self.offsetX = 50
         self.offsetY = 50
         self.offsetZ = 0
+	self.min     = [10000.0, 10000.0, 10000.0]
+	self.max     = [-10000.0, -10000.0, -10000.0]
+
+    def shiftCoordinates(self, x, y, z):
+	pass
+
+    def calculateMinMax(self):
+	return None
 
     def parseData(self, line):
         raise Exception("parseData not defined")
@@ -223,6 +231,34 @@ class GCode0(CoordinateCode):
         self.e = 1.0 
         #Need to supply a little E so that 
         #  pronterface will load an display the gcode
+
+    def shiftCoordinates(self, x, y, z):
+	for point in range(len(self.data)):
+	    ix, iy, iz, e = self.data[point]
+	    if x and self.data[point][0]:
+		self.data[point][0] = ix + x
+	    if y and self.data[point][1]:
+		self.data[point][1] = iy + y
+	    if z and self.data[point][2]:
+                self.data[point][2] = iz + z
+
+    def calculateMinMax(self):
+	fmin = [10000.0, 10000.0, 10000.0]
+	fmax = [-10000.0, -10000.0, -10000.0]
+	if not self.data:
+	    return None
+	for point in self.data:
+	    x, y, z, e = point
+	    if x:
+	        fmin[0] = min(fmin[0], x)
+		fmax[0] = max(fmax[0], x)
+	    if y:
+	    	fmin[1] = min(fmin[1], y)
+	    	fmax[1] = max(fmax[1], y)
+	    if z:
+	    	fmin[2] = min(fmin[2], z)
+	    	fmax[2] = max(fmax[2], z)
+	return (fmin, fmax)
         
     def parseData( self, line ):
         global x
@@ -247,15 +283,13 @@ class GCode0(CoordinateCode):
             elif i.startswith("E"):
                 self.e = float(i[1:])
         #result = (self.x, self.y, self.z, self.e)
-        result = (x, y, z, self.e)
+        result = [x, y, z, self.e]
         self.data.append( result )
 
     def serialize(self):
         result="G92 E0 (Added to set the amount of Filament)\n"
         #result=""
         for cmd in self.data:
-            #print cmd
-            #result += cmd + "\n"
             lresult = ""
             for axis, val in enumerate(cmd):
                 if axis == 0 and val!=None:
@@ -527,7 +561,41 @@ class Cnc2printer(object):
             oldGcode = s_gCode
         ifp.close()
 
-        
+        print "Calculating Min/Max"
+	fmin = [10000.0, 10000.0, 10000.0]
+	fmax = [-10000.0, -10000.0, -10000.0]
+        for gObj in commandCue:
+            minMax = gObj.calculateMinMax()
+	    if minMax:
+		[xmin, ymin, zmin], [xmax, ymax, zmax] = minMax
+		fmin[0] = min(fmin[0], xmin)
+		fmin[1] = min(fmin[1], ymin)
+		fmin[2] = min(fmin[2], zmin)
+		fmax[0] = max(fmax[0], xmax)
+		fmax[1] = max(fmax[1], ymax)
+		fmax[2] = max(fmax[2], zmax)
+        print fmin, fmax
+
+	userOffset = 8
+        print "Shifting Min/Max", 0.0, 0.0, -fmin[2]
+        for gObj in commandCue:
+	    gObj.shiftCoordinates(0.0, 0.0, -fmin[2]+userOffset)
+
+        print "Calculating Min/Max"
+	fmin = [10000.0, 10000.0, 10000.0]
+	fmax = [-10000.0, -10000.0, -10000.0]
+        for gObj in commandCue:
+            minMax = gObj.calculateMinMax()
+	    if minMax:
+		[xmin, ymin, zmin], [xmax, ymax, zmax] = minMax
+		fmin[0] = min(fmin[0], xmin)
+		fmin[1] = min(fmin[1], ymin)
+		fmin[2] = min(fmin[2], zmin)
+		fmax[0] = max(fmax[0], xmax)
+		fmax[1] = max(fmax[1], ymax)
+		fmax[2] = max(fmax[2], zmax)
+        print fmin, fmax
+
         print "Outputing File"
         for gObj in commandCue:
             cmd = gObj.serialize()
