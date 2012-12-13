@@ -78,7 +78,7 @@ import wx
 // M85  - Set inactivity shutdown timer with parameter S<seconds>. To disable set zero (default)
 // M92  - Set axis_steps_per_unit - same syntax as G92
 // M114 - Output current position to serial port 
-// M115	- Capabilities string
+// M115        - Capabilities string
 // M117 - display message
 // M119 - Output Endstop status to serial port
 // M140 - Set bed target temp
@@ -118,20 +118,41 @@ class CodeBase(object):
         self.data = []
         self.comment = None
         self.code = code
+        self.x = None
+        self.y = None
+        self.z = None
+        self.e = 1.0
         self.scaleX = 1
         self.scaleY = 1
         self.scaleZ = 1
         self.offsetX = 50
         self.offsetY = 50
         self.offsetZ = 0
-	self.min     = [10000.0, 10000.0, 10000.0]
-	self.max     = [-10000.0, -10000.0, -10000.0]
+        self.min     = [10000.0, 10000.0, 10000.0]
+        self.max     = [-10000.0, -10000.0, -10000.0]
 
     def shiftCoordinates(self, x, y, z):
-	pass
+        pass
 
     def calculateMinMax(self):
-	return None
+        return None
+
+    def parseCoordinate( self, line ):
+        global x
+        global y
+        global z
+        cmd, comment = self.parseComment(line)
+        data = cmd.split(" ")
+        for i in data:
+            if i.startswith("X"):
+                x = self.x = float(i[1:])
+            elif i.startswith("Y"):
+                y = self.y = float(i[1:])
+            elif i.startswith("Z"):
+                z = self.z = float(i[1:])
+            elif i.startswith("E"):
+                self.e = float(i[1:])
+        return [x, y, z, self.e]
 
     def parseData(self, line):
         raise Exception("parseData not defined")
@@ -141,7 +162,7 @@ class CodeBase(object):
         if len(result) == 1:
             command, self.comment = result[0], None
         elif len(result) == 2:
-            command, self.comment = result[0], "{" + result[1]
+            command, self.comment = result[0], "(" + result[1]
         return command, self.comment
     
     def serialize(self):
@@ -156,6 +177,7 @@ class NotImplementedCode(CodeBase):
 
     def parseData( self, s_line ):
         self.data.append( s_line )
+        return True
         
     def serialize(self):
         result=""
@@ -181,6 +203,7 @@ class CoordinateCode(CodeBase):
     def parseData( self, s_line ):
         line = ";" + s_line
         self.data.append( line )
+        return True
         
     def serialize(self):
         result=""
@@ -191,18 +214,52 @@ class CoordinateCode(CodeBase):
 class CommandCode(CodeBase):
     def __init__(self, code=None):
         CodeBase.__init__(self, code)
-        #print "Not implemented"
 
     def parseData( self, s_line ):
         line = s_line.strip()
-        self.data.append( line )
+        cmd, comment = self.parseComment(line)
+        self.data.append( (cmd, comment) )
+        return True
         
     def serialize(self):
         result=""
-        for cmd in self.data:
-            result += str(self.code) + " " + str(cmd) + "\n"
+        for cmd, comment in self.data:
+            result += str(self.code) + " " + str(cmd)
+            if comment:
+                result += " " + str(comment)
+            result += "\n"
+
         return result
+
+class SingleLineCommandCode(CodeBase):
+    def __init__(self, code=None):
+        CodeBase.__init__(self, code)
+
+    def parseData( self, s_line ):
+        if self.data:
+            line = s_line.strip()
+            result = self.parseCoordinate( line )
+            print line, result
+            return False
+        line = s_line.strip()
+        cmd, comment = self.parseComment(line)
+        self.data.append( (cmd, comment) )
+        return True
         
+    def serialize(self):
+        result=""
+        for cmd, comment in self.data:
+            result += str(self.code) + " " + str(cmd)
+            if comment:
+                result += " " + str(comment)
+            result += "\n"
+
+        return result
+
+
+############################################################    
+## GCodes
+############################################################    
 class GCodeComment(CodeBase):
     def __init__(self, code=";"):
         CodeBase.__init__(self, code)
@@ -210,6 +267,7 @@ class GCodeComment(CodeBase):
     def parseData( self, line ):
         cmd, comment = self.parseComment(line)
         self.data.append( line )
+        return True
 
     def serialize(self):
         result=None
@@ -225,70 +283,50 @@ class GCode0(CoordinateCode):
     '''
     def __init__(self, code="G0"):
         CoordinateCode.__init__(self, code)
-        self.x = None
-        self.y = None
-        self.z = None
-        self.e = 1.0 
         #Need to supply a little E so that 
         #  pronterface will load an display the gcode
 
     def shiftCoordinates(self, x, y, z):
-	for point in range(len(self.data)):
-	    ix, iy, iz, e = self.data[point]
-	    if x and self.data[point][0]:
-		self.data[point][0] = ix + x
-	    if y and self.data[point][1]:
-		self.data[point][1] = iy + y
-	    if z and self.data[point][2]:
-                self.data[point][2] = iz + z
+        for idx, point in enumerate(self.data):
+            ix, iy, iz, e = self.data[idx]
+            if ix:
+                self.data[idx][0] = ix + x
+            else:
+                self.data[idx][0] = x
+            if iy:
+                self.data[idx][1] = iy + y
+            else:
+                self.data[idx][1] = y
+            if iz:
+                self.data[idx][2] = iz + z
+            else:
+                self.data[idx][2] = z
 
     def calculateMinMax(self):
-	fmin = [10000.0, 10000.0, 10000.0]
-	fmax = [-10000.0, -10000.0, -10000.0]
-	if not self.data:
-	    return None
-	for point in self.data:
-	    x, y, z, e = point
-	    if x:
-	        fmin[0] = min(fmin[0], x)
-		fmax[0] = max(fmax[0], x)
-	    if y:
-	    	fmin[1] = min(fmin[1], y)
-	    	fmax[1] = max(fmax[1], y)
-	    if z:
-	    	fmin[2] = min(fmin[2], z)
-	    	fmax[2] = max(fmax[2], z)
-	return (fmin, fmax)
+        fmin = [10000.0, 10000.0, 10000.0]
+        fmax = [-10000.0, -10000.0, -10000.0]
+        if not self.data:
+            return None
+        for point in self.data:
+            x, y, z, e = point
+            if x:
+                fmin[0] = min(fmin[0], x)
+                fmax[0] = max(fmax[0], x)
+            if y:
+                fmin[1] = min(fmin[1], y)
+                fmax[1] = max(fmax[1], y)
+            if z:
+                fmin[2] = min(fmin[2], z)
+                fmax[2] = max(fmax[2], z)
+        return (fmin, fmax)
         
     def parseData( self, line ):
-        global x
-        global y
-        global z
-	x = self.x
-	y = self.y
-	z = self.z
-        cmd, comment = self.parseComment(line)
-        data = cmd.split(" ")
-        code = data[0]
-        for i in data:
-            if i.startswith("X"):
-                self.x = float(i[1:])
-                x = self.x
-            elif i.startswith("Y"):
-                self.y = float(i[1:])
-                y = self.y
-            elif i.startswith("Z"):
-                self.z = float(i[1:])
-                z = self.z
-            elif i.startswith("E"):
-                self.e = float(i[1:])
-        #result = (self.x, self.y, self.z, self.e)
-        result = [x, y, z, self.e]
+        result = self.parseCoordinate( line )
         self.data.append( result )
+        return True
 
     def serialize(self):
         result="G92 E0 (Added to set the amount of Filament)\n"
-        #result=""
         for cmd in self.data:
             lresult = ""
             for axis, val in enumerate(cmd):
@@ -304,6 +342,14 @@ class GCode0(CoordinateCode):
             result += self.code + lresult + "\n"
 
         return result
+
+class GCode4(SingleLineCommandCode):
+    def __init__(self, code="G4"):
+        SingleLineCommandCode.__init__(self, code)
+
+class GCode04(SingleLineCommandCode):
+    def __init__(self, code="G04"):
+        SingleLineCommandCode.__init__(self, code)
 
 class GCode1(GCode0):
     def __init__(self, code="G1"):
@@ -332,6 +378,9 @@ class GCode92(CommandCode):
     def __init__(self, code="G92"):
         CommandCode.__init__(self, code)
 
+############################################################    
+## MCodes
+############################################################    
 class MCode3(CommandCode):
     '''
         M3 - Turn on Spindle -> M107 Turn on Fan
@@ -342,9 +391,10 @@ class MCode3(CommandCode):
     def parseData( self, s_line ):
         line = s_line.strip()
         self.data.append( line )
+        return True
         
     def serialize(self):
-        result = str("M106") + " (Tuen on Fan/Spindle)\n"
+        result = str("M106 S255") + " (Turn on Fan/Spindle)\n"
         return result
     
 class MCode4(CommandCode):
@@ -357,9 +407,10 @@ class MCode4(CommandCode):
     def parseData( self, s_line ):
         line = s_line.strip()
         self.data.append( line )
+        return True
         
     def serialize(self):
-        result = str("M107") + " (Tuen off Fan/Spindle)\n"
+        result = str("M107 S0") + " (Turn off Fan/Spindle)\n"
         return result
 
 
@@ -373,16 +424,22 @@ class MCode302(CommandCode):
     def parseData( self, s_line ):
         line = s_line.strip()
         self.data.append( line )
+        return True
         
     def serialize(self):
         result = str(self.code) + " (Override cold extrude)\n"
         return result
-    
+
+
+############################################################    
+## Factory
+############################################################    
 factoryLookups = {
     ";":GCodeComment,
     "G0":GCode0,
     "G1":GCode1,
-    "G04":CommandCode,
+    "G4":GCode4,
+    "G04":GCode04,
     "G21":NotImplementedCode, 
     "G40":NotImplementedCode,
     "G49":NotImplementedCode,
@@ -396,7 +453,9 @@ factoryLookups = {
     "M302":MCode302,         # Marlin: Enable Cold Extrudes
     "M2":NotImplementedCode, # End Program
     "M3":MCode3,             # Start Spindle -> M106 Fan On
-    "M5":MCode4,             # Stop Spindle -> M107 Fan Off
+    "M5":MCode4,             # Stop Spindle  -> M107 Fan Off
+    "M106":MCode3,           # Start Spindle -> M106 Fan On
+    "M107":MCode4,           # Stop Spindle  -> M107 Fan Off
     
     "P3":NotImplementedCode,
     
@@ -429,14 +488,14 @@ def gCodeLookup(line):
             s_gCode = "G80"
         elif line.startswith("G90"):
             s_gCode = "G90"
-        elif line.startswith("G49"):
-            s_gCode = "G49"
         elif line.startswith("G0"):
             s_gCode = "G0"
         elif line.startswith("G1"):
             s_gCode = "G1"
+        elif line.startswith("G4"):
+            s_gCode = "G4"
     elif line.startswith("F"):
-        s_gCode = "F"
+            s_gCode = "F"
     elif line.startswith("M"):
         if line.startswith("M2"):
             s_gCode = "M2"
@@ -492,6 +551,22 @@ class Cnc2printer(object):
             result = dlg.GetPath()
         return result
 
+    def calculateMinMax(self):
+        fmin = [10000.0, 10000.0, 10000.0]
+        fmax = [-10000.0, -10000.0, -10000.0]
+        for gObj in self.commandCue:
+            minMax = gObj.calculateMinMax()
+            if minMax:
+                [xmin, ymin, zmin], [xmax, ymax, zmax] = minMax
+                fmin[0] = min(fmin[0], xmin)
+                fmin[1] = min(fmin[1], ymin)
+                fmin[2] = min(fmin[2], zmin)
+                fmax[0] = max(fmax[0], xmax)
+                fmax[1] = max(fmax[1], ymax)
+                fmax[2] = max(fmax[2], zmax)
+        return fmin, fmax
+
+
     def convert(self):
         self.parent.clearOutput("")
         try:
@@ -505,7 +580,7 @@ class Cnc2printer(object):
         if self.inputFilename:
             res = self.inputFilename.split(".")
             self.outputFilename = res[0] + "_convert.gcode"
-	    self.last_path = os.path.dirname(self.inputFilename)
+            self.last_path = os.path.dirname(self.inputFilename)
         
         print "InputFile", self.inputFilename
         try:
@@ -521,11 +596,11 @@ class Cnc2printer(object):
             
         gCode = None
         oldGcode = None
-        commandCue = []
+        self.commandCue = []
         gCodeI = None
 
         ##Override Cold Extrudes for CNC
-        commandCue.append(MCode302())
+        self.commandCue.append(MCode302())
         
         for s_line in ifp.readlines():
             line = s_line
@@ -546,7 +621,7 @@ class Cnc2printer(object):
  
             if s_gCode and oldGcode != s_gCode:
                 gCodeI = factoryLookups.get(s_gCode, CommandCode)(s_gCode)
-                commandCue.append(gCodeI)
+                self.commandCue.append(gCodeI)
 
                 #Remove the code from the line`
                 if s_gCode != ";":
@@ -556,54 +631,32 @@ class Cnc2printer(object):
                 line = line[1:]
 
             if gCodeI:
-                gCodeI.parseData(line)
+                result = gCodeI.parseData(line)
                 
             oldGcode = s_gCode
         ifp.close()
 
         print "Calculating Min/Max"
-	fmin = [10000.0, 10000.0, 10000.0]
-	fmax = [-10000.0, -10000.0, -10000.0]
-        for gObj in commandCue:
-            minMax = gObj.calculateMinMax()
-	    if minMax:
-		[xmin, ymin, zmin], [xmax, ymax, zmax] = minMax
-		fmin[0] = min(fmin[0], xmin)
-		fmin[1] = min(fmin[1], ymin)
-		fmin[2] = min(fmin[2], zmin)
-		fmax[0] = max(fmax[0], xmax)
-		fmax[1] = max(fmax[1], ymax)
-		fmax[2] = max(fmax[2], zmax)
+        fmin, fmax = self.calculateMinMax()
         print fmin, fmax
 
-	userOffset = 8
-        print "Shifting Min/Max", 0.0, 0.0, -fmin[2]
-        for gObj in commandCue:
-	    gObj.shiftCoordinates(0.0, 0.0, -fmin[2]+userOffset)
+        print "Shifting Min/Max", -fmin[0], -fmin[1], -fmin[2]
+        for gObj in self.commandCue:
+            gObj.shiftCoordinates(-fmin[0], -fmin[1], -fmin[2])
 
         print "Calculating Min/Max"
-	fmin = [10000.0, 10000.0, 10000.0]
-	fmax = [-10000.0, -10000.0, -10000.0]
-        for gObj in commandCue:
-            minMax = gObj.calculateMinMax()
-	    if minMax:
-		[xmin, ymin, zmin], [xmax, ymax, zmax] = minMax
-		fmin[0] = min(fmin[0], xmin)
-		fmin[1] = min(fmin[1], ymin)
-		fmin[2] = min(fmin[2], zmin)
-		fmax[0] = max(fmax[0], xmax)
-		fmax[1] = max(fmax[1], ymax)
-		fmax[2] = max(fmax[2], zmax)
+        fmin, fmax = self.calculateMinMax()
         print fmin, fmax
 
         print "Outputing File"
-        for gObj in commandCue:
+        for gObj in self.commandCue:
             cmd = gObj.serialize()
             if cmd:
                 ofp.write( str(cmd) )
 
         print "Done Outputing File", self.outputFilename
         ofp.close()
+        self.commandCue=None
 
 try:
     cnc2printerSingleton=None
