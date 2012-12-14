@@ -2,28 +2,9 @@
 ## to printer/marlin gcode so that printerface and RAMPS can be 
 ## used for milling
 
-## One macro need to be deined in pronterface to execute the code
-##  Be sure to remove the # comments when creating the macro
-## Cnc2printer macro
-#!lib="C:/Users/Ryan/Programs/Pronterface/"
-#!import sys
-#!addpath=True
-#!for libpath in sys.path:
-#!    if libpath.startswith(lib):
-#!        addpath=False
-#!if addpath:
-#!    print "Adding path", lib
-#!    sys.path.append(lib)
 
-#!import cnc2printer
-#!reload(cnc2printer)
-#!cnc2printer= cnc2printer.Cnc2printer(self)
-#!cnc2printer.level()
-
-import time, sys, threading
 import os
 import re
-import wx
 
 """
 // look here for descriptions of gcodes: http://linuxcnc.org/handbook/gcode/g-code.html
@@ -125,8 +106,8 @@ class CodeBase(object):
         self.scaleX = 1
         self.scaleY = 1
         self.scaleZ = 1
-        self.offsetX = 50
-        self.offsetY = 50
+        self.offsetX = 0 #50
+        self.offsetY = 0 #50
         self.offsetZ = 0
         self.min     = [10000.0, 10000.0, 10000.0]
         self.max     = [-10000.0, -10000.0, -10000.0]
@@ -236,10 +217,13 @@ class SingleLineCommandCode(CodeBase):
         CodeBase.__init__(self, code)
 
     def parseData( self, s_line ):
+        global x
+        global y
+        global z
         if self.data:
             line = s_line.strip()
             result = self.parseCoordinate( line )
-            print line, result
+            print "SingleLineCommand", line, x, y, z, result
             return False
         line = s_line.strip()
         cmd, comment = self.parseComment(line)
@@ -326,7 +310,7 @@ class GCode0(CoordinateCode):
         return True
 
     def serialize(self):
-        result="G92 E0 (Added to set the amount of Filament)\n"
+        result=";G92 E0 (Added to set the amount of Filament)\n"
         for cmd in self.data:
             lresult = ""
             for axis, val in enumerate(cmd):
@@ -521,35 +505,19 @@ def gCodeLookup(line):
 
     return s_gCode
 
-class Cnc2printer(object):
+class cnc2printer(object):
     def __init__(self, parent):
+        global x
+        global y
+        global z
         self.parent = parent
-        self.last_path = "C:/Users/Ryan/Documents/3dStlFiles/"
-        self.inputFilename  = ""
-        self.outputFilename = ""
         self.x = None
         self.y = None
         self.z = None
-
-    def loadFiles(self):
-        result=""
-
-        basedir = self.last_path
-        if not os.path.exists(basedir):
-            basedir = "."
-            try:
-                basedir = os.path.split(self.filename)[0]
-            except:
-                pass
-
-        dlg = wx.FileDialog(self.parent, _("Open file to translate"), 
-                          basedir, style = wx.FD_OPEN|wx.FD_FILE_MUST_EXIST)
-        option = " GCODE files (*.gcode;*.gco;*.g;*.ngc;)|"
-        option += "*.gcode;*.gco;*.g;*.ngc;|All Files (*.*)|*.*"
-        dlg.SetWildcard(_(option))
-        if(dlg.ShowModal() == wx.ID_OK):
-            result = dlg.GetPath()
-        return result
+        x = 0.0
+        y = 0.0
+        z = 0.0
+        self.shift = False
 
     def calculateMinMax(self):
         fmin = [10000.0, 10000.0, 10000.0]
@@ -567,32 +535,18 @@ class Cnc2printer(object):
         return fmin, fmax
 
 
-    def convert(self):
-        self.parent.clearOutput("")
+    def convertFile(self, inputFile, outputFile):
+        print "convertFile", inputFile
         try:
-            self.inputFilename = self.loadFiles()
-            if not self.inputFilename:
-                print "No File specified" 
-                return
-        except Exceptiom, error:
-            print error
-
-        if self.inputFilename:
-            res = self.inputFilename.split(".")
-            self.outputFilename = res[0] + "_convert.gcode"
-            self.last_path = os.path.dirname(self.inputFilename)
-        
-        print "InputFile", self.inputFilename
-        try:
-            ifp=open(self.inputFilename, "r")
+            ifp=open(inputFile, "r")
         except:
-            print "Failed to open", self.inputFilename
+            print "Failed to open", inputFile
 
-        print "OutputFile", self.outputFilename
+        print "OutputFile", outputFile
         try:
-            ofp=open(self.outputFilename, "w")
+            ofp=open(outputFile, "w")
         except:
-            print "Failed to open", self.outputFilename
+            print "Failed to open", outputFile
             
         gCode = None
         oldGcode = None
@@ -640,9 +594,12 @@ class Cnc2printer(object):
         fmin, fmax = self.calculateMinMax()
         print fmin, fmax
 
-        print "Shifting Min/Max", -fmin[0], -fmin[1], -fmin[2]
-        for gObj in self.commandCue:
-            gObj.shiftCoordinates(-fmin[0], -fmin[1], -fmin[2])
+        if self.shift:
+            xShift = 50 ##Center in x
+            yShift = 50 ##Center in y
+            print "Shifting Min/Max", -fmin[0]+xShift, -fmin[1]+yShift, -fmin[2]
+            for gObj in self.commandCue:
+                gObj.shiftCoordinates(-fmin[0]+xShift, -fmin[1]+yShift, -fmin[2])
 
         print "Calculating Min/Max"
         fmin, fmax = self.calculateMinMax()
@@ -654,28 +611,12 @@ class Cnc2printer(object):
             if cmd:
                 ofp.write( str(cmd) )
 
-        print "Done Outputing File", self.outputFilename
+        print "Done Outputing File", outputFile
         ofp.close()
         self.commandCue=None
 
-try:
-    cnc2printerSingleton=None
-except Exception, error:
-    print "Exception", error
-
-def GetCnc2printerSingleton(parent):
-    global cnc2printerSingleton
-    if not cnc2printerSingleton:
-        cnc2printerSingleton=Cnc2printer(parent)
-    return cnc2printerSingleton
-
-
-        
-#if __name__ == '__main__':
-##if True:
-##    print
-##    print "Start Processing"
-##    print dir()
-##    main = Cnc2printer(self)
-##    main.level()
+       
+if __name__ == '__main__':
+    c2p=cnc2printer()
+    c2p.convertFile(inputfile, outputfile)
 
