@@ -1,0 +1,16 @@
+!lib="C:/Users/Ryan/Programs/Pronterface/"
+!import sys
+!addpath=True
+!for libpath in sys.path:
+!    if libpath.startswith(lib):
+!        addpath=False
+!if addpath:
+!    print "Adding path", lib
+!    sys.path.append(lib)
+!try:
+!    import cnc2printerPronterface
+!    reload(cnc2printerPronterface)
+!except Exception, error:
+!    print error
+!print "Loaded"
+!cnc2printerPronterface.cnc2printerMacro(self).convert()
