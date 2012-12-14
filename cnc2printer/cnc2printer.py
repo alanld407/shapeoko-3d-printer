@@ -4,7 +4,7 @@
 
 
 import os
-import re
+import sys
 
 """
 // look here for descriptions of gcodes: http://linuxcnc.org/handbook/gcode/g-code.html
@@ -536,7 +536,9 @@ class cnc2printer(object):
 
 
     def convertFile(self, inputFile, outputFile):
-        print "convertFile", inputFile
+        if not inputFile or not outputFile:
+            raise Exception("File not specified")
+
         try:
             ifp=open(inputFile, "r")
         except:
@@ -617,6 +619,31 @@ class cnc2printer(object):
 
        
 if __name__ == '__main__':
-    c2p=cnc2printer()
-    c2p.convertFile(inputfile, outputfile)
+    args = {
+        'inputfile':"",
+        'outputfile':"",
+    }
+
+    def printHelp():
+        print '''
+    usage: cnc2printer inputFile outputFile
+        '''
+        sys.exit(1)
+
+    def parseArgs( args ):
+        #print sys.argv
+        for arg in sys.argv[1:]:
+            print "Arg", arg
+
+    #print len(args), sys.argv[1:]
+
+    if len(sys.argv[1:]) < 2:
+        printHelp()
+
+    parseArgs( args )
+    args['inputfile'] = sys.argv[-2]
+    args['outputfile'] = sys.argv[-1]
+
+    c2p=cnc2printer(None)
+    c2p.convertFile(args['inputfile'], args['outputfile'])
 
