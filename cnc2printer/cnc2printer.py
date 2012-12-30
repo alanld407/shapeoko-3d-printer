@@ -659,6 +659,8 @@ class cnc2printer(object):
         
         for s_line in ifp.readlines():
             line = s_line
+
+            ##Chop off end of line chararacters. Mainly for Windows
             if line and len(line) > 1:
                 while line[-1] != ";" and \
                       line[-1] != "]" and \
@@ -666,6 +668,7 @@ class cnc2printer(object):
                       not line[-1].isalnum():
                     line = line[:-1]
 
+            ##Lookup the gcode for the current line
             try:
                 s_gCode = gCodeLookup(line)
             except Exception, error:
@@ -674,7 +677,8 @@ class cnc2printer(object):
                 import traceback
                 traceback.print_stack()
                 raise
- 
+
+            ##Instance gCode object
             if s_gCode and oldGcode != s_gCode:
                 gCodeI = factoryLookups.get(s_gCode, CommandCode)(s_gCode)
                 self.commandCue.append(gCodeI)
@@ -688,12 +692,16 @@ class cnc2printer(object):
             if gCodeI:
                 result = gCodeI.parseData(line)
             oldGcode = s_gCode
+
         ifp.close()
 
+        ##Calculate min/max so that we can prevent the 
+        ##  gCode from slamming into the surface.
         print "Calculating Min/Max"
         fmin, fmax = self.calculateMinMax()
         print fmin, fmax
 
+        ##Shift the coordinates
         if self.shift:
             xShift = 25 ##Center in x
             yShift = 25 ##Center in y
@@ -705,6 +713,7 @@ class cnc2printer(object):
         fmin, fmax = self.calculateMinMax()
         print fmin, fmax
 
+        ##Serialize the data to disk
         print "Outputing File"
         for gObj in self.commandCue:
             cmd = gObj.serialize()
