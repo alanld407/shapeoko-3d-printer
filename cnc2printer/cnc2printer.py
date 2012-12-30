@@ -94,6 +94,25 @@ global x
 global y
 global z
 
+def RemoveSpace(line):
+    if line:
+        while line[0].isspace():
+            line = line[1:]
+    return line
+
+def RemoveSpacesFromCoordinates(line):
+   #print "Before", line, len(line)
+    for axis in ["X", "Y", "Z", "E", "I", "J"]:
+        lineIdx = line.find(axis)
+        if lineIdx>-1:
+            b_line = line[:lineIdx+1]
+            a_line = line[lineIdx+1:]
+            while a_line[0].isspace():
+                a_line = a_line[1:]
+            line = b_line + a_line
+   #print "After", line
+    return line
+
 class CodeBase(object):
     def __init__(self, code=None):
         self.data = []
@@ -102,6 +121,8 @@ class CodeBase(object):
         self.x = None
         self.y = None
         self.z = None
+        self.i = None
+        self.j = None
         self.e = 1.0
         self.scaleX = 1
         self.scaleY = 1
@@ -122,6 +143,7 @@ class CodeBase(object):
         global x
         global y
         global z
+        line = RemoveSpacesFromCoordinates(line)
         cmd, comment = self.parseComment(line)
         data = cmd.split(" ")
         for i in data:
@@ -272,7 +294,9 @@ class GCode0(CoordinateCode):
 
     def shiftCoordinates(self, x, y, z):
         for idx, point in enumerate(self.data):
-            ix, iy, iz, e = self.data[idx]
+            ix = self.data[idx][0]
+            iy = self.data[idx][1]
+            iz = self.data[idx][2]
             if ix:
                 self.data[idx][0] = ix + x
             else:
@@ -292,7 +316,9 @@ class GCode0(CoordinateCode):
         if not self.data:
             return None
         for point in self.data:
-            x, y, z, e = point
+            x = point[0]
+            y = point[1]
+            z = point[2]
             if x:
                 fmin[0] = min(fmin[0], x)
                 fmax[0] = max(fmax[0], x)
@@ -321,6 +347,61 @@ class GCode0(CoordinateCode):
                 elif axis == 2 and val!=None:
                     lresult += " Z%s" % (val * self.scaleZ + self.offsetZ)
                 elif axis == 3 and val!=None:
+                    lresult += " E%s" % val
+
+            result += self.code + lresult + "\n"
+
+        return result
+
+class GCodeArc(GCode0):
+    '''
+        G2  - CW ARC
+        G3  - CCW ARC X Y I J
+    '''
+    def __init__(self, code="G3"):
+        GCode0.__init__(self, code)
+        #Need to supply a little E so that 
+        #  pronterface will load an display the gcode
+
+    def parseCoordinate( self, line ):
+        global x
+        global y
+        global z
+        line = RemoveSpacesFromCoordinates(line)
+        cmd, comment = self.parseComment(line)
+        data = cmd.split(" ")
+        for i in data:
+            if i.startswith("X"):
+                x = self.x = float(i[1:])
+            elif i.startswith("Y"):
+                y = self.y = float(i[1:])
+            elif i.startswith("Z"):
+                z = self.z = float(i[1:])
+            elif i.startswith("E"):
+                self.e = float(i[1:])
+            elif i.startswith("I"):
+                self.i = float(i[1:])
+            elif i.startswith("J"):
+                self.j = float(i[1:])
+        return [x, y, z, self.i, self.j, self.e]        
+
+    def serialize(self):
+        print "serialize", self.data
+        result=";G92 E0 (Added to set the amount of Filament)\n"
+        for cmd in self.data:
+            lresult = ""
+            for axis, val in enumerate(cmd):
+                if axis == 0 and val!=None:
+                    lresult += " X%s" % (val * self.scaleX + self.offsetX)
+                elif axis == 1 and val!=None:
+                    lresult += " Y%s" % (val * self.scaleY + self.offsetY)
+                elif axis == 2 and val!=None:
+                    lresult += " Z%s" % (val * self.scaleZ + self.offsetZ)
+                elif axis == 3 and val!=None:
+                    lresult += " I%s" % val
+                elif axis == 4 and val!=None:
+                    lresult += " J%s" % val
+                elif axis == 5 and val!=None:
                     lresult += " E%s" % val
 
             result += self.code + lresult + "\n"
@@ -422,13 +503,17 @@ factoryLookups = {
     ";":GCodeComment,
     "G0":GCode0,
     "G1":GCode1,
+    "G2":GCodeArc,
+    "G3":GCodeArc,
     "G4":GCode4,
     "G04":GCode04,
+    "G17":NotImplementedCode, 
     "G21":NotImplementedCode, 
     "G40":NotImplementedCode,
     "G49":NotImplementedCode,
     "G54":NotImplementedCode, 
     "G61":NotImplementedCode, #exact path mode
+    "G64":NotImplementedCode, 
     "G80":NotImplementedCode, #cancel modal motion
     "G90":GCode90,
     "G91":GCode91,
@@ -455,9 +540,13 @@ def gCodeLookup(line):
     if line.startswith(";"):
         gCode = -1
         s_gCode = ";"
+    elif line.startswith("("):
+        s_gCode = ";"
     elif line.startswith("G"):
         if line.startswith("G04"):
             s_gCode = "G04"
+        elif line.startswith("G17"):
+            s_gCode = "G17"
         elif line.startswith("G21"):
             s_gCode = "G21"
         elif line.startswith("G40"):
@@ -468,6 +557,8 @@ def gCodeLookup(line):
             s_gCode = "G54"
         elif line.startswith("G61"):
             s_gCode = "G61"
+        elif line.startswith("G64"):
+            s_gCode = "G64"
         elif line.startswith("G80"):
             s_gCode = "G80"
         elif line.startswith("G90"):
@@ -476,8 +567,15 @@ def gCodeLookup(line):
             s_gCode = "G0"
         elif line.startswith("G1"):
             s_gCode = "G1"
+        elif line.startswith("G2"):
+            s_gCode = "G2"
+        elif line.startswith("G3"):
+            s_gCode = "G3"
         elif line.startswith("G4"):
             s_gCode = "G4"
+        else:
+            print line.startswith("G2")
+            raise Exception("GCode (%s) not registered" % line)
     elif line.startswith("F"):
             s_gCode = "F"
     elif line.startswith("M"):
@@ -499,6 +597,8 @@ def gCodeLookup(line):
             s_gCode = "T2"
         elif line.startswith("T3"):
             s_gCode = "T3"
+        else:
+            raise Exception("TCode (%s) not registered" % line)
 
     if verbose:
         print "Found Code", s_gCode
@@ -517,7 +617,7 @@ class cnc2printer(object):
         x = 0.0
         y = 0.0
         z = 0.0
-        self.shift = False
+        self.shift = True
 
     def calculateMinMax(self):
         fmin = [10000.0, 10000.0, 10000.0]
@@ -569,8 +669,9 @@ class cnc2printer(object):
 
             try:
                 s_gCode = gCodeLookup(line)
-            except:
+            except Exception, error:
                 print "Error", line
+                print error
                 import traceback
                 traceback.print_stack()
                 raise
@@ -582,13 +683,11 @@ class cnc2printer(object):
                 #Remove the code from the line`
                 if s_gCode != ";":
                     line = line[len(s_gCode):]
-                    
-            while line[0].isspace():
-                line = line[1:]
+
+            line = RemoveSpace(line)
 
             if gCodeI:
                 result = gCodeI.parseData(line)
-                
             oldGcode = s_gCode
         ifp.close()
 
@@ -597,8 +696,8 @@ class cnc2printer(object):
         print fmin, fmax
 
         if self.shift:
-            xShift = 50 ##Center in x
-            yShift = 50 ##Center in y
+            xShift = 25 ##Center in x
+            yShift = 25 ##Center in y
             print "Shifting Min/Max", -fmin[0]+xShift, -fmin[1]+yShift, -fmin[2]
             for gObj in self.commandCue:
                 gObj.shiftCoordinates(-fmin[0]+xShift, -fmin[1]+yShift, -fmin[2])
