@@ -121,8 +121,6 @@ class CodeBase(object):
         self.x = None
         self.y = None
         self.z = None
-        self.i = None
-        self.j = None
         self.e = 1.0
         self.scaleX = 1
         self.scaleY = 1
@@ -143,6 +141,7 @@ class CodeBase(object):
         global x
         global y
         global z
+	f = None
         line = RemoveSpacesFromCoordinates(line)
         cmd, comment = self.parseComment(line)
         data = cmd.split(" ")
@@ -155,7 +154,9 @@ class CodeBase(object):
                 z = self.z = float(i[1:])
             elif i.startswith("E"):
                 self.e = float(i[1:])
-        return [x, y, z, self.e]
+            elif i.startswith("F"):
+                f = float(i[1:])
+        return [x, y, z, self.e, f]
 
     def parseData(self, line):
         raise Exception("parseData not defined")
@@ -276,12 +277,12 @@ class GCodeComment(CodeBase):
         return True
 
     def serialize(self):
-        result=None
+        result=""
         for cmd in self.data:
             ##Make sure that the comments have a ;
             if cmd[0] == "(":
                 cmd = ";" + cmd
-            result = cmd + "\n"
+            result += cmd + "\n"
         return result
 
 
@@ -351,6 +352,8 @@ class GCode0(CoordinateCode):
                     lresult += " Z%s" % (val * self.scaleZ + self.offsetZ)
                 elif axis == 3 and val!=None:
                     lresult += " E%s" % val
+                elif axis == 4 and val!=None:
+                    lresult += " F%s" % val
 
             result += self.code + lresult + "\n"
 
@@ -365,6 +368,8 @@ class GCodeArc(GCode0):
         GCode0.__init__(self, code)
         #Need to supply a little E so that 
         #  pronterface will load an display the gcode
+        self.i = None
+        self.j = None
 
     def parseCoordinate( self, line ):
         global x
@@ -503,6 +508,7 @@ class MCode302(CommandCode):
 ############################################################    
 factoryLookups = {
     ";":GCodeComment,
+    "(":GCodeComment,
     "G0":GCode0,
     "G1":GCode1,
     "G2":GCodeArc,
@@ -511,6 +517,7 @@ factoryLookups = {
     "G04":GCode04,
     "G17":NotImplementedCode, 
     "G21":NotImplementedCode, 
+    "G28":CommandCode, 
     "G40":NotImplementedCode,
     "G49":NotImplementedCode,
     "G54":NotImplementedCode, 
@@ -519,12 +526,17 @@ factoryLookups = {
     "G80":NotImplementedCode, #cancel modal motion
     "G90":GCode90,
     "G91":GCode91,
+    "G92":GCode92,
     "F":FSCode,  #
     "S":FSCode,  #
     "M302":MCode302,         # Marlin: Enable Cold Extrudes
     "M2":NotImplementedCode, # End Program
     "M3":MCode3,             # Start Spindle -> M106 Fan On
     "M5":MCode4,             # Stop Spindle  -> M107 Fan Off
+    "M8":NotImplementedCode, # 
+    "M9":NotImplementedCode, # 
+    "M84":CommandCode,       # 
+    "M104":CommandCode,      # 
     "M106":MCode3,           # Start Spindle -> M106 Fan On
     "M107":MCode4,           # Stop Spindle  -> M107 Fan Off
     
@@ -535,77 +547,33 @@ factoryLookups = {
     "T3":NotImplementedCode, #
     }
 
+gCodeTable = {}
+for code in factoryLookups.keys() + ["("]:
+    if not gCodeTable.get(code[0]):
+        gCodeTable[code[0]] = set()
+    gCodeTable[code[0]].add(code)
+codeKeys = gCodeTable.keys()
+#print "Keys", codeKeys
+#print "Table", gCodeTable
+
 def gCodeLookup(line):
     verbose=False
-    s_gCode=None
 
-    if line.startswith(";"):
-        gCode = -1
-        s_gCode = ";"
-    elif line.startswith("("):
-        s_gCode = ";"
-    elif line.startswith("G"):
-        if line.startswith("G04"):
-            s_gCode = "G04"
-        elif line.startswith("G17"):
-            s_gCode = "G17"
-        elif line.startswith("G21"):
-            s_gCode = "G21"
-        elif line.startswith("G40"):
-            s_gCode = "G40"
-        elif line.startswith("G49"):
-            s_gCode = "G49"
-        elif line.startswith("G54"):
-            s_gCode = "G54"
-        elif line.startswith("G61"):
-            s_gCode = "G61"
-        elif line.startswith("G64"):
-            s_gCode = "G64"
-        elif line.startswith("G80"):
-            s_gCode = "G80"
-        elif line.startswith("G90"):
-            s_gCode = "G90"
-        elif line.startswith("G0"):
-            s_gCode = "G0"
-        elif line.startswith("G1"):
-            s_gCode = "G1"
-        elif line.startswith("G2"):
-            s_gCode = "G2"
-        elif line.startswith("G3"):
-            s_gCode = "G3"
-        elif line.startswith("G4"):
-            s_gCode = "G4"
-        else:
-            print line.startswith("G2")
-            raise Exception("GCode (%s) not registered" % line)
-    elif line.startswith("F"):
-            s_gCode = "F"
-    elif line.startswith("M"):
-        if line.startswith("M2"):
-            s_gCode = "M2"
-        elif line.startswith("M3"):
-            s_gCode = "M3"
-        elif line.startswith("M5"):
-            s_gCode = "M5"
-    elif line.startswith("P"):
-        if line.startswith("P3"):
-            s_gCode = "P3"
-    elif line.startswith("S"):
-        s_gCode = "S"
-    elif line.startswith("T"):
-        if line.startswith("T1"):
-            s_gCode = "T1"
-        elif line.startswith("T2"):
-            s_gCode = "T2"
-        elif line.startswith("T3"):
-            s_gCode = "T3"
-        else:
-            raise Exception("TCode (%s) not registered" % line)
+    code = line[0]
+    if code in codeKeys:
+	if line[:4] in gCodeTable[code]:
+	    return line[:4]
+	elif line[:3] in gCodeTable[code]:
+	    return line[:3]
+	elif line[:2] in gCodeTable[code]:
+	    return line[:2]
+	elif line[:1] in gCodeTable[code]:
+	    return line[:1]
+    	else:
+	    return None
 
-    if verbose:
-        print "Found Code", s_gCode
-
-    return s_gCode
+    #print "gCodeLookup (%s) %s" % (line, len(line))
+    return None
 
 class cnc2printer(object):
     def __init__(self, parent):
@@ -664,7 +632,11 @@ class cnc2printer(object):
             line = s_line
 
             ##Chop off end of line chararacters. Mainly for Windows
-            if line and len(line) > 1:
+            if line and len(line) >= 1:
+		if line[0] == "\n" or line[0] == "\r":
+		    continue
+
+		##Remove windows stuff from the end of line
                 while line[-1] != ";" and \
                       line[-1] != "]" and \
                       line[-1] != ")" and \
@@ -686,14 +658,20 @@ class cnc2printer(object):
                 gCodeI = factoryLookups.get(s_gCode, CommandCode)(s_gCode)
                 self.commandCue.append(gCodeI)
 
-                #Remove the code from the line`
+                #Remove the code from the line
                 if s_gCode != ";":
                     line = line[len(s_gCode):]
 
             line = RemoveSpace(line)
 
             if gCodeI:
-                result = gCodeI.parseData(line)
+		try:
+                    result = gCodeI.parseData(line)
+		except Exception, error:
+		    print s_gCode, gCodeI
+		    print line
+		    print error
+		    raise
             oldGcode = s_gCode
 
         ifp.close()
@@ -706,9 +684,17 @@ class cnc2printer(object):
 
         ##Shift the coordinates
         if self.shift:
-            xShift = 25 ##Center in x
-            yShift = 25 ##Center in y
-            print "Shifting Min/Max", -fmin[0]+xShift, -fmin[1]+yShift, -fmin[2]
+           #xShift = 25 ##Center in x
+           #yShift = 25 ##Center in y
+           #print "Shifting Min/Max", -fmin[0]+xShift, -fmin[1]+yShift, -fmin[2]
+           #for gObj in self.commandCue:
+           #    gObj.shiftCoordinates(-fmin[0]+xShift, -fmin[1]+yShift, -fmin[2])
+
+	    bedXSize = 190
+	    bedYSize = 190
+	    xShift = bedXSize/2.0 - float(fmax[0] - fmin[0])/2.0 
+	    yShift = bedYSize/2.0 - float(fmax[1] - fmin[1])/2.0 
+            print "Centering Min/Max", -fmin[0]+xShift, -fmin[1]+yShift, -fmin[2]
             for gObj in self.commandCue:
                 gObj.shiftCoordinates(-fmin[0]+xShift, -fmin[1]+yShift, -fmin[2])
 
