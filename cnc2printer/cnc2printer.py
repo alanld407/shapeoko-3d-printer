@@ -278,6 +278,9 @@ class GCodeComment(CodeBase):
     def serialize(self):
         result=None
         for cmd in self.data:
+            ##Make sure that the comments have a ;
+            if cmd[0] == "(":
+                cmd = ";" + cmd
             result = cmd + "\n"
         return result
 
