@@ -542,6 +542,8 @@ factoryLookups = {
     "M109":CommandCode,      # 
     "M106":MCode3,           # Start Spindle -> M106 Fan On
     "M107":MCode4,           # Stop Spindle  -> M107 Fan Off
+    "M140":CommandCode,      # 
+    "M190":CommandCode,      # 
     
     "P3":NotImplementedCode,
     
@@ -573,13 +575,14 @@ def gCodeLookup(line):
 	elif line[:1] in gCodeTable[code]:
 	    return line[:1]
     	else:
+	    print "Code (%s) Not found (%s)" % (code, line)
 	    return None
 
     #print "gCodeLookup (%s) %s" % (line, len(line))
     return None
 
 class cnc2printer(object):
-    def __init__(self, parent):
+    def __init__(self, parent, center=False, shift=False, zOffset=0):
         global x
         global y
         global z
@@ -590,7 +593,9 @@ class cnc2printer(object):
         x = 0.0
         y = 0.0
         z = 0.0
-        self.shift = True
+        self.shift = shift
+	self.center = center
+	self.zOffset = zOffset
 
     def calculateMinMax(self):
         fmin = [10000.0, 10000.0, 10000.0]
@@ -701,10 +706,9 @@ class cnc2printer(object):
             for gObj in self.commandCue:
                 gObj.shiftCoordinates(-fmin[0]+xShift, -fmin[1]+yShift, -fmin[2])
 	if True:
-	    zOffset = -.33
-            print "Centering Min/Max", 0.0, 0.0, -fmin[2]+zOffset
+            print "Centering Min/Max", 0.0, 0.0, -fmin[2]+self.zOffset
             for gObj in self.commandCue:
-                gObj.shiftCoordinates(0.0, 0.0, -fmin[2]+zOffset)
+                gObj.shiftCoordinates(0.0, 0.0, -fmin[2]+self.zOffset)
 
         print "Calculating Min/Max"
         fmin, fmax = self.calculateMinMax()

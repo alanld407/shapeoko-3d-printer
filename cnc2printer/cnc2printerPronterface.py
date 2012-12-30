@@ -5,6 +5,7 @@
 ## One macro need to be deined in pronterface to execute the code
 ##  Be sure to remove the # comments when creating the macro
 ## Cnc2printer macro
+
 #!lib="C:/Users/Ryan/Programs/Pronterface/"
 #!import sys
 #!addpath=True
@@ -14,19 +15,24 @@
 #!if addpath:
 #!    print "Adding path", lib
 #!    sys.path.append(lib)
-
-#!import cnc2printer
-#!reload(cnc2printer)
-#!cnc2printer= cnc2printer.Cnc2printer(self))
+#!try:
+#!    import cnc2printerPronterface
+#!    reload(cnc2printerPronterface)
+#!except Exception, error:
+#!    print error
+#!print "Loaded"
+#!cnc2printerPronterface.cnc2printerMacro(self).convert()
+#!cnc2printerPronterface.cnc2printerMacro(self, center=True, zOffset=-0.28).convert()
 
 
 import wx
 import cnc2printer
+reload(cnc2printer)
 import os
 
 class cnc2printerMacro(cnc2printer.cnc2printer):
-    def __init__(self, parent):
-        cnc2printer.cnc2printer.__init__(self, parent)
+    def __init__(self, parent, center=True, zOffset=0):
+        cnc2printer.cnc2printer.__init__(self, parent, center=center, zOffset=zOffset)
         self.last_path = "C:/Users/Ryan/Documents/3dStlFiles/"
         self.inputFilename = ""
         self.outputFilename = ""
