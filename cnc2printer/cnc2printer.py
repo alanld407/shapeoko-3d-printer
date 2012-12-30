@@ -297,15 +297,15 @@ class GCode0(CoordinateCode):
             ix = self.data[idx][0]
             iy = self.data[idx][1]
             iz = self.data[idx][2]
-            if ix:
+            if ix!=None:
                 self.data[idx][0] = ix + x
             else:
                 self.data[idx][0] = x
-            if iy:
+            if iy!=None:
                 self.data[idx][1] = iy + y
             else:
                 self.data[idx][1] = y
-            if iz:
+            if iz!=None:
                 self.data[idx][2] = iz + z
             else:
                 self.data[idx][2] = z
@@ -319,13 +319,13 @@ class GCode0(CoordinateCode):
             x = point[0]
             y = point[1]
             z = point[2]
-            if x:
+            if x!=None:
                 fmin[0] = min(fmin[0], x)
                 fmax[0] = max(fmax[0], x)
-            if y:
+            if y!=None:
                 fmin[1] = min(fmin[1], y)
                 fmax[1] = max(fmax[1], y)
-            if z:
+            if z!=None:
                 fmin[2] = min(fmin[2], z)
                 fmax[2] = max(fmax[2], z)
         return (fmin, fmax)
@@ -386,7 +386,6 @@ class GCodeArc(GCode0):
         return [x, y, z, self.i, self.j, self.e]        
 
     def serialize(self):
-        print "serialize", self.data
         result=";G92 E0 (Added to set the amount of Filament)\n"
         for cmd in self.data:
             lresult = ""
