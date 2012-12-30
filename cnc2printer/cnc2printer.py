@@ -515,8 +515,10 @@ factoryLookups = {
     "G3":GCodeArc,
     "G4":GCode4,
     "G04":GCode04,
+    "G10":CommandCode, 
+    "G11":CommandCode, 
     "G17":NotImplementedCode, 
-    "G21":NotImplementedCode, 
+    "G21":CommandCode, 
     "G28":CommandCode, 
     "G40":NotImplementedCode,
     "G49":NotImplementedCode,
@@ -537,6 +539,7 @@ factoryLookups = {
     "M9":NotImplementedCode, # 
     "M84":CommandCode,       # 
     "M104":CommandCode,      # 
+    "M109":CommandCode,      # 
     "M106":MCode3,           # Start Spindle -> M106 Fan On
     "M107":MCode4,           # Stop Spindle  -> M107 Fan Off
     
@@ -683,13 +686,13 @@ class cnc2printer(object):
         print fmin, fmax
 
         ##Shift the coordinates
-        if self.shift:
-           #xShift = 25 ##Center in x
-           #yShift = 25 ##Center in y
-           #print "Shifting Min/Max", -fmin[0]+xShift, -fmin[1]+yShift, -fmin[2]
-           #for gObj in self.commandCue:
-           #    gObj.shiftCoordinates(-fmin[0]+xShift, -fmin[1]+yShift, -fmin[2])
-
+	if False: #self.shift:
+           xShift = 25 ##Center in x
+           yShift = 25 ##Center in y
+           print "Shifting Min/Max", -fmin[0]+xShift, -fmin[1]+yShift, -fmin[2]
+           for gObj in self.commandCue:
+               gObj.shiftCoordinates(-fmin[0]+xShift, -fmin[1]+yShift, -fmin[2])
+	if False:
 	    bedXSize = 190
 	    bedYSize = 190
 	    xShift = bedXSize/2.0 - float(fmax[0] - fmin[0])/2.0 
@@ -697,6 +700,11 @@ class cnc2printer(object):
             print "Centering Min/Max", -fmin[0]+xShift, -fmin[1]+yShift, -fmin[2]
             for gObj in self.commandCue:
                 gObj.shiftCoordinates(-fmin[0]+xShift, -fmin[1]+yShift, -fmin[2])
+	if True:
+	    zOffset = -.33
+            print "Centering Min/Max", 0.0, 0.0, -fmin[2]+zOffset
+            for gObj in self.commandCue:
+                gObj.shiftCoordinates(0.0, 0.0, -fmin[2]+zOffset)
 
         print "Calculating Min/Max"
         fmin, fmax = self.calculateMinMax()
