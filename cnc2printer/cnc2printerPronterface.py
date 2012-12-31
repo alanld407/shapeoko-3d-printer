@@ -31,7 +31,7 @@ reload(cnc2printer)
 import os
 
 class cnc2printerMacro(cnc2printer.cnc2printer):
-    def __init__(self, parent, shift=False, center=True, offset=False, zOffset=0):
+    def __init__(self, parent, shift=False, center=False, offset=False, zOffset=0):
         cnc2printer.cnc2printer.__init__(self, parent, shift=shift, center=center, offset=offset, zOffset=zOffset)
         self.last_path = "C:/Users/Ryan/Documents/3dStlFiles/"
         self.inputFilename = ""
