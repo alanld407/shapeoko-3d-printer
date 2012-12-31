@@ -582,7 +582,7 @@ def gCodeLookup(line):
     return None
 
 class cnc2printer(object):
-    def __init__(self, parent, center=False, shift=False, zOffset=0):
+    def __init__(self, parent, center=False, shift=False, offset=False, zOffset=0):
         global x
         global y
         global z
@@ -595,6 +595,7 @@ class cnc2printer(object):
         z = 0.0
         self.shift = shift
 	self.center = center
+	self.offset = offset
 	self.zOffset = zOffset
 
     def calculateMinMax(self):
@@ -691,13 +692,13 @@ class cnc2printer(object):
         print fmin, fmax
 
         ##Shift the coordinates
-	if False: #self.shift:
+	if self.shift:
            xShift = 25 ##Center in x
            yShift = 25 ##Center in y
            print "Shifting Min/Max", -fmin[0]+xShift, -fmin[1]+yShift, -fmin[2]
            for gObj in self.commandCue:
                gObj.shiftCoordinates(-fmin[0]+xShift, -fmin[1]+yShift, -fmin[2])
-	if False:
+	if self.center:
 	    bedXSize = 190
 	    bedYSize = 190
 	    xShift = bedXSize/2.0 - float(fmax[0] - fmin[0])/2.0 
@@ -705,7 +706,7 @@ class cnc2printer(object):
             print "Centering Min/Max", -fmin[0]+xShift, -fmin[1]+yShift, -fmin[2]
             for gObj in self.commandCue:
                 gObj.shiftCoordinates(-fmin[0]+xShift, -fmin[1]+yShift, -fmin[2])
-	if True:
+	if self.offset:
             print "Centering Min/Max", 0.0, 0.0, -fmin[2]+self.zOffset
             for gObj in self.commandCue:
                 gObj.shiftCoordinates(0.0, 0.0, -fmin[2]+self.zOffset)
