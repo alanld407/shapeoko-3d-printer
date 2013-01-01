@@ -162,6 +162,9 @@ class CodeBase(object):
         raise Exception("parseData not defined")
     
     def parseComment(self, line):
+        if line[0] == '(':
+            return '', line
+
         result = line.split("(")
         if len(result) == 1:
             command, self.comment = result[0], None
@@ -189,7 +192,17 @@ class NotImplementedCode(CodeBase):
             result += ";" + str(self.code) + " " + str(cmd) + "    (Not Implemented)\n"
         return result
 
-class FSCode(NotImplementedCode):
+class FCode(NotImplementedCode):
+    def __init__(self, code=None):
+        NotImplementedCode.__init__(self, code)
+
+    def serialize(self):
+        result=""
+        for cmd in self.data:
+            result += "G0 " + str(self.code) + str(cmd) + "\n"
+        return result
+
+class SCode(NotImplementedCode):
     def __init__(self, code=None):
         NotImplementedCode.__init__(self, code)
 
@@ -198,7 +211,7 @@ class FSCode(NotImplementedCode):
         for cmd in self.data:
             result += ";" + str(self.code) + str(cmd) + "    (Not Implemented)\n"
         return result
-    
+        
 class CoordinateCode(CodeBase):
     def __init__(self, code=None):
         CodeBase.__init__(self, code)
@@ -529,8 +542,8 @@ factoryLookups = {
     "G90":GCode90,
     "G91":GCode91,
     "G92":GCode92,
-    "F":FSCode,  #
-    "S":FSCode,  #
+    "F":FCode,  #
+    "S":SCode,  #
     "M302":MCode302,         # Marlin: Enable Cold Extrudes
     "M2":NotImplementedCode, # End Program
     "M3":MCode3,             # Start Spindle -> M106 Fan On
@@ -583,19 +596,10 @@ def gCodeLookup(line):
 
 class cnc2printer(object):
     def __init__(self, parent, center=False, shift=False, offset=False, zOffset=0):
-        global x
-        global y
-        global z
-        self.parent = parent
-        self.x = None
-        self.y = None
-        self.z = None
-        x = 0.0
-        y = 0.0
-        z = 0.0
-        self.shift = shift
-	self.center = center
-	self.offset = offset
+        self.parent  = parent
+        self.shift   = shift
+	self.center  = center
+	self.offset  = offset
 	self.zOffset = zOffset
 
     def calculateMinMax(self):
@@ -621,13 +625,15 @@ class cnc2printer(object):
         try:
             ifp=open(inputFile, "r")
         except:
-            print "Failed to open", inputFile
+            print "Failed to open input file", inputFile
+	    return
 
         print "OutputFile", outputFile
         try:
             ofp=open(outputFile, "w")
         except:
-            print "Failed to open", outputFile
+            print "Failed to open output file", outputFile
+	    return
             
         gCode = None
         oldGcode = None
@@ -667,8 +673,9 @@ class cnc2printer(object):
                 gCodeI = factoryLookups.get(s_gCode, CommandCode)(s_gCode)
                 self.commandCue.append(gCodeI)
 
+		##Do not process comments
                 #Remove the code from the line
-                if s_gCode != ";":
+                if s_gCode != ";" and s_gCode != "(":
                     line = line[len(s_gCode):]
 
             line = RemoveSpace(line)
@@ -731,18 +738,39 @@ if __name__ == '__main__':
     args = {
         'inputfile':"",
         'outputfile':"",
-    }
+	'center': False,
+	'shift': False,
+	'offset': False,
+	'offsetVal': 0.0,
+	'offsetZVal': 0.0,
+	}
 
     def printHelp():
         print '''
-    usage: cnc2printer inputFile outputFile
+    usage: cnc2printer [options] inputFile outputFile
+        options:
+	    -center : Center gCode on table
+	    -shift : Shift gCode by amount
+	    -offset : Offset Z by amount
         '''
         sys.exit(1)
 
     def parseArgs( args ):
-        #print sys.argv
-        for arg in sys.argv[1:]:
-            print "Arg", arg
+	argv = sys.argv[1:]
+
+        for idx in range(len(argv)):
+            arg = argv[idx]
+	    if arg == '-center':
+		args['center'] = True
+	    elif arg == '-shift':
+		args['shift'] = True
+	    elif arg== '-offset':
+		args['offset'] = True
+		idx += 1
+		args['offsetZVal'] = argv[idx]
+	    elif arg== '-offsetVal':
+		idx += 1
+		args['offsetVal'] = argv[idx]
 
     #print len(args), sys.argv[1:]
 
@@ -750,9 +778,11 @@ if __name__ == '__main__':
         printHelp()
 
     parseArgs( args )
+    print args
+
     args['inputfile'] = sys.argv[-2]
     args['outputfile'] = sys.argv[-1]
 
-    c2p=cnc2printer(None)
+    c2p=cnc2printer(None, center=args['center'], shift=args['shift'], offset=args['offset'], zOffset=args['offsetZVal'])
     c2p.convertFile(args['inputfile'], args['outputfile'])
 
